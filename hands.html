@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+
+  <title>Telefon Kamerasi – 3D Barmoq Raqam</title>
+
+  <!-- Three.js -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+
+  <!-- MediaPipe -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      background: black;
+      overflow: hidden;
+      touch-action: none;
+    }
+
+    video {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      object-fit: cover;
+      transform: scaleX(-1);
+      z-index: 1;
+    }
+
+    canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    #info {
+      position: fixed;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #0f0;
+      font-size: 18px;
+      z-index: 3;
+      background: rgba(0,0,0,0.5);
+      padding: 6px 12px;
+      border-radius: 10px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <video id="video" autoplay playsinline></video>
+  <div id="info">✋ Barmoqlarni ko‘rsating</div>
+
+<script>
+/* =====================
+   THREE.JS
+===================== */
+const scene = new THREE.Scene();
+const camera3D = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 100);
+camera3D.position.z = 5;
+
+const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const light = new THREE.DirectionalLight(0x00ff00, 1);
+light.position.set(0, 0, 5);
+scene.add(light);
+
+let mesh = null;
+
+function showNumber(num) {
+  if (mesh) scene.remove(mesh);
+
+  const loader = new THREE.FontLoader();
+  loader.load(
+    "https://threejs.org/examples/fonts/helvetiker_regular.typeface.json",
+    font => {
+      const geo = new THREE.TextGeometry(num.toString(), {
+        font,
+        size: 1.2,
+        height: 0.3
+      });
+      const mat = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
+      mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(-0.4, -0.6, 0);
+      scene.add(mesh);
+    }
+  );
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  if (mesh) mesh.rotation.y += 0.02;
+  renderer.render(scene, camera3D);
+}
+animate();
+
+/* =====================
+   MEDIAPIPE
+===================== */
+const video = document.getElementById("video");
+
+const hands = new Hands({
+  locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+});
+
+hands.setOptions({
+  maxNumHands: 1,
+  modelComplexity: 1,
+  minDetectionConfidence: 0.7,
+  minTrackingConfidence: 0.7
+});
+
+hands.onResults(res => {
+  if (!res.multiHandLandmarks) return;
+
+  const lm = res.multiHandLandmarks[0];
+
+  const fingers = [
+    lm[8].y < lm[6].y,
+    lm[12].y < lm[10].y,
+    lm[16].y < lm[14].y,
+    lm[20].y < lm[18].y
+  ];
+
+  let count = fingers.filter(f => f).length;
+
+  if (lm[4].x > lm[3].x) count++;
+
+  showNumber(count);
+});
+
+const cam = new Camera(video, {
+  onFrame: async () => {
+    await hands.send({ image: video });
+  },
+  width: window.innerWidth,
+  height: window.innerHeight,
+  facingMode: "user"
+});
+
+cam.start();
+
+/* =====================
+   RESPONSIVE
+===================== */
+window.addEventListener("resize", () => {
+  camera3D.aspect = window.innerWidth / window.innerHeight;
+  camera3D.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+
+</body>
+</html>
