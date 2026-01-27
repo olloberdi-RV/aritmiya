@@ -6,8 +6,12 @@
 
   <title>Telefon Kamerasi – 3D Barmoq Raqam</title>
 
-  <!-- Three.js -->
+  <!-- Three.js core -->
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+
+  <!-- Three.js extras (MUHIM!) -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/loaders/FontLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/geometries/TextGeometry.js"></script>
 
   <!-- MediaPipe -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
@@ -18,13 +22,10 @@
       margin: 0;
       background: black;
       overflow: hidden;
-      touch-action: none;
     }
 
     video {
       position: fixed;
-      top: 0;
-      left: 0;
       width: 100vw;
       height: 100vh;
       object-fit: cover;
@@ -34,8 +35,6 @@
 
     canvas {
       position: fixed;
-      top: 0;
-      left: 0;
       z-index: 2;
       pointer-events: none;
     }
@@ -46,26 +45,32 @@
       left: 50%;
       transform: translateX(-50%);
       color: #0f0;
+      background: rgba(0,0,0,0.6);
+      padding: 8px 14px;
+      border-radius: 12px;
       font-size: 18px;
       z-index: 3;
-      background: rgba(0,0,0,0.5);
-      padding: 6px 12px;
-      border-radius: 10px;
     }
   </style>
 </head>
 
 <body>
 
-  <video id="video" autoplay playsinline></video>
-  <div id="info">✋ Barmoqlarni ko‘rsating</div>
+<video id="video" autoplay playsinline></video>
+<div id="info">✋ Barmoqlarni ko‘rsating</div>
 
 <script>
 /* =====================
    THREE.JS
 ===================== */
 const scene = new THREE.Scene();
-const camera3D = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 100);
+
+const camera3D = new THREE.PerspectiveCamera(
+  70,
+  window.innerWidth / window.innerHeight,
+  0.1,
+  100
+);
 camera3D.position.z = 5;
 
 const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
@@ -76,42 +81,44 @@ const light = new THREE.DirectionalLight(0x00ff00, 1);
 light.position.set(0, 0, 5);
 scene.add(light);
 
-let mesh = null;
+let textMesh = null;
+const fontLoader = new THREE.FontLoader();
 
 function showNumber(num) {
-  if (mesh) scene.remove(mesh);
+  if (textMesh) scene.remove(textMesh);
 
-  const loader = new THREE.FontLoader();
-  loader.load(
+  fontLoader.load(
     "https://threejs.org/examples/fonts/helvetiker_regular.typeface.json",
     font => {
-      const geo = new THREE.TextGeometry(num.toString(), {
-        font,
+      const geometry = new THREE.TextGeometry(num.toString(), {
+        font: font,
         size: 1.2,
-        height: 0.3
+        height: 0.3,
       });
-      const mat = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
-      mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(-0.4, -0.6, 0);
-      scene.add(mesh);
+
+      const material = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
+      textMesh = new THREE.Mesh(geometry, material);
+      textMesh.position.set(-0.5, -0.6, 0);
+      scene.add(textMesh);
     }
   );
 }
 
 function animate() {
   requestAnimationFrame(animate);
-  if (mesh) mesh.rotation.y += 0.02;
+  if (textMesh) textMesh.rotation.y += 0.02;
   renderer.render(scene, camera3D);
 }
 animate();
 
 /* =====================
-   MEDIAPIPE
+   MEDIAPIPE HANDS
 ===================== */
 const video = document.getElementById("video");
 
 const hands = new Hands({
-  locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+  locateFile: file =>
+    `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
 });
 
 hands.setOptions({
@@ -121,10 +128,10 @@ hands.setOptions({
   minTrackingConfidence: 0.7
 });
 
-hands.onResults(res => {
-  if (!res.multiHandLandmarks) return;
+hands.onResults(results => {
+  if (!results.multiHandLandmarks) return;
 
-  const lm = res.multiHandLandmarks[0];
+  const lm = results.multiHandLandmarks[0];
 
   const fingers = [
     lm[8].y < lm[6].y,
@@ -133,8 +140,7 @@ hands.onResults(res => {
     lm[20].y < lm[18].y
   ];
 
-  let count = fingers.filter(f => f).length;
-
+  let count = fingers.filter(Boolean).length;
   if (lm[4].x > lm[3].x) count++;
 
   showNumber(count);
@@ -148,7 +154,6 @@ const cam = new Camera(video, {
   height: window.innerHeight,
   facingMode: "user"
 });
-
 cam.start();
 
 /* =====================
@@ -163,4 +168,3 @@ window.addEventListener("resize", () => {
 
 </body>
 </html>
-
