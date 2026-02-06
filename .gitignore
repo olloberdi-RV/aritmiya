@@ -1,16 +1,19 @@
 # Backup files
 *.backup
+*.bak
+*~
 
 # OS files
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # Editor files
 .vscode/
 .idea/
 *.swp
 *.swo
-*~
+*.sublime-*
 
 # Logs
 *.log
@@ -18,3 +21,6 @@ Thumbs.db
 # Temporary files
 tmp/
 temp/
+
+# Test files
+test-*.html

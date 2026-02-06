@@ -29,10 +29,18 @@ const config = {
     sensitivity: 3.0,        // Rotation sensitivity
     inertiaDamping: 0.92,    // Inertia damping factor (0-1)
     stopThreshold: 0.001,    // Threshold to detect stopped rotation
-    stopDelay: 500           // Delay before country detection (ms)
+    stopDelay: 500,          // Delay before country detection (ms)
+    movementThreshold: 0.01  // Minimum movement to detect hand motion
   },
   detection: {
-    minConfidence: 0.7
+    minConfidence: 0.7,
+    maxDistanceKm: 1000      // Maximum distance for country match (km)
+  },
+  ui: {
+    countryDisplayTime: 3000,     // Time to show country display (ms)
+    atmosphereBaseOpacity: 0.1,   // Base opacity of atmosphere
+    atmospherePulseAmplitude: 0.1, // Pulse effect amplitude
+    atmospherePulseFrequency: 0.5  // Pulse effect frequency
   }
 };
 
@@ -309,8 +317,8 @@ function findCountryAtCoordinates(lat, lon) {
     }
   }
   
-  // Only return a country if we're reasonably close (within 1000km)
-  if (minDistance < 1000) {
+  // Only return a country if we're reasonably close (within configured distance)
+  if (minDistance < config.detection.maxDistanceKm) {
     return nearestCountry;
   }
   
@@ -366,7 +374,7 @@ function onHandsDetected(results) {
   
   // Check if hand is moving
   const movementMagnitude = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-  state.hand.isMoving = movementMagnitude > 0.01;
+  state.hand.isMoving = movementMagnitude > config.gesture.movementThreshold;
   
   if (state.hand.isMoving) {
     // Update target rotation based on hand movement
@@ -498,19 +506,20 @@ function showCountryDisplay(country) {
   
   display.style.display = 'block';
   
-  // Fade out after 3 seconds
+  // Fade out after configured time
   setTimeout(() => {
     display.style.display = 'none';
-  }, 3000);
+  }, config.ui.countryDisplayTime);
   
   // Highlight effect (pulse the atmosphere)
   let pulseCount = 0;
   const pulseInterval = setInterval(() => {
-    atmosphereMaterial.opacity = 0.1 + Math.sin(pulseCount * 0.5) * 0.1;
+    atmosphereMaterial.opacity = config.ui.atmosphereBaseOpacity + 
+      Math.sin(pulseCount * config.ui.atmospherePulseFrequency) * config.ui.atmospherePulseAmplitude;
     pulseCount++;
     if (pulseCount > 10) {
       clearInterval(pulseInterval);
-      atmosphereMaterial.opacity = 0.1;
+      atmosphereMaterial.opacity = config.ui.atmosphereBaseOpacity;
     }
   }, 100);
 }
