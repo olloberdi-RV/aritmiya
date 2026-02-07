@@ -1,170 +1,281 @@
+
 <!DOCTYPE html>
-<html lang="uz">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <title>3D Globe - Hand Gesture Control</title>
 
-  <title>Telefon Kamerasi – 3D Barmoq Raqam</title>
+  <!-- 
+    HOW TO RUN:
+    1. This application requires a local web server due to camera access restrictions
+    2. Python: python -m http.server 8000
+    3. Node.js: npx http-server -p 8000
+    4. Open browser to http://localhost:8000
+    5. Allow camera permissions when prompted
+    6. Move your hand to rotate the globe
+    7. Stop moving to detect the country at the center
+  -->
 
   <!-- Three.js core -->
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
 
-  <!-- Three.js extras (MUHIM!) -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/loaders/FontLoader.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/geometries/TextGeometry.js"></script>
-
-  <!-- MediaPipe -->
+  <!-- MediaPipe Hands for gesture detection -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
   <style>
-    body {
+    * {
       margin: 0;
-      background: black;
-      overflow: hidden;
+      padding: 0;
+      box-sizing: border-box;
     }
 
-    video {
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
+      overflow: hidden;
+      color: white;
+    }
+
+    /* Main canvas for 3D globe */
+    #globe-canvas {
       position: fixed;
-      width: 100vw;
-      height: 100vh;
-      object-fit: cover;
-      transform: scaleX(-1);
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
       z-index: 1;
     }
 
-    canvas {
+    /* Camera preview window (small) */
+    #video-preview {
       position: fixed;
-      z-index: 2;
-      pointer-events: none;
+      bottom: 20px;
+      right: 20px;
+      width: 200px;
+      height: 150px;
+      border: 3px solid rgba(255, 255, 255, 0.3);
+      border-radius: 12px;
+      transform: scaleX(-1);
+      z-index: 10;
+      object-fit: cover;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
     }
 
-    #info {
+    /* Country name display */
+    #country-display {
       position: fixed;
-      bottom: 10px;
+      top: 50%;
       left: 50%;
-      transform: translateX(-50%);
-      color: #0f0;
-      background: rgba(0,0,0,0.6);
-      padding: 8px 14px;
-      border-radius: 12px;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.85);
+      padding: 30px 50px;
+      border-radius: 20px;
+      font-size: 42px;
+      font-weight: bold;
+      color: #4CAF50;
+      z-index: 5;
+      text-align: center;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
+      border: 2px solid rgba(76, 175, 80, 0.5);
+      display: none;
+      animation: fadeIn 0.5s ease-in;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+      to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    }
+
+    #country-display .country-name {
+      margin-bottom: 10px;
+    }
+
+    #country-display .country-info {
       font-size: 18px;
-      z-index: 3;
+      color: #aaa;
+      font-weight: normal;
+      margin-top: 10px;
+    }
+
+    /* Instructions panel */
+    #instructions {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 20px;
+      border-radius: 12px;
+      max-width: 350px;
+      z-index: 10;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    #instructions h2 {
+      margin-bottom: 15px;
+      color: #4CAF50;
+      font-size: 20px;
+    }
+
+    #instructions ul {
+      list-style: none;
+      padding: 0;
+    }
+
+    #instructions li {
+      padding: 8px 0;
+      padding-left: 25px;
+      position: relative;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+
+    #instructions li:before {
+      content: '▸';
+      position: absolute;
+      left: 0;
+      color: #4CAF50;
+    }
+
+    /* Status indicator */
+    #status {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 15px 25px;
+      border-radius: 12px;
+      z-index: 10;
+      font-size: 16px;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .status-dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 10px;
+      animation: pulse 2s infinite;
+    }
+
+    .status-active {
+      background: #4CAF50;
+    }
+
+    .status-inactive {
+      background: #f44336;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* Coordinate display */
+    #coordinates {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 15px 20px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-family: 'Courier New', monospace;
+      z-index: 10;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    /* Loading indicator */
+    #loading {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 24px;
+      z-index: 100;
+      text-align: center;
+    }
+
+    .spinner {
+      border: 4px solid rgba(255, 255, 255, 0.1);
+      border-top: 4px solid #4CAF50;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 20px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* Responsive design */
+    @media (max-width: 768px) {
+      #instructions {
+        font-size: 12px;
+        padding: 15px;
+        max-width: 250px;
+      }
+
+      #country-display {
+        font-size: 32px;
+        padding: 20px 30px;
+      }
+
+      #video-preview {
+        width: 120px;
+        height: 90px;
+      }
     }
   </style>
 </head>
 
 <body>
+  <!-- Loading indicator -->
+  <div id="loading">
+    <div class="spinner"></div>
+    <div>Loading Globe & Camera...</div>
+  </div>
 
-<video id="video" autoplay playsinline></video>
-<div id="info">✋ Barmoqlarni ko‘rsating</div>
+  <!-- Instructions panel -->
+  <div id="instructions">
+    <h2>🌍 Hand Gesture Controls</h2>
+    <ul>
+      <li>Move your hand left/right to rotate longitude</li>
+      <li>Move your hand up/down to rotate latitude</li>
+      <li>Stop moving to detect the country</li>
+      <li>Open palm for best tracking</li>
+    </ul>
+  </div>
 
-<script>
-/* =====================
-   THREE.JS
-===================== */
-const scene = new THREE.Scene();
+  <!-- Status indicator -->
+  <div id="status">
+    <span class="status-dot status-inactive" id="status-dot"></span>
+    <span id="status-text">Initializing...</span>
+  </div>
 
-const camera3D = new THREE.PerspectiveCamera(
-  70,
-  window.innerWidth / window.innerHeight,
-  0.1,
-  100
-);
-camera3D.position.z = 5;
+  <!-- Coordinate display -->
+  <div id="coordinates">
+    <div>Latitude: <span id="lat-display">0.00°</span></div>
+    <div>Longitude: <span id="lon-display">0.00°</span></div>
+  </div>
 
-const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-document.body.appendChild(renderer.domElement);
+  <!-- Country name display -->
+  <div id="country-display">
+    <div class="country-name" id="country-name"></div>
+    <div class="country-info" id="country-info"></div>
+  </div>
 
-const light = new THREE.DirectionalLight(0x00ff00, 1);
-light.position.set(0, 0, 5);
-scene.add(light);
+  <!-- Camera preview (small window) -->
+  <video id="video-preview" autoplay playsinline muted></video>
 
-let textMesh = null;
-const fontLoader = new THREE.FontLoader();
-
-function showNumber(num) {
-  if (textMesh) scene.remove(textMesh);
-
-  fontLoader.load(
-    "https://threejs.org/examples/fonts/helvetiker_regular.typeface.json",
-    font => {
-      const geometry = new THREE.TextGeometry(num.toString(), {
-        font: font,
-        size: 1.2,
-        height: 0.3,
-      });
-
-      const material = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
-      textMesh = new THREE.Mesh(geometry, material);
-      textMesh.position.set(-0.5, -0.6, 0);
-      scene.add(textMesh);
-    }
-  );
-}
-
-function animate() {
-  requestAnimationFrame(animate);
-  if (textMesh) textMesh.rotation.y += 0.02;
-  renderer.render(scene, camera3D);
-}
-animate();
-
-/* =====================
-   MEDIAPIPE HANDS
-===================== */
-const video = document.getElementById("video");
-
-const hands = new Hands({
-  locateFile: file =>
-    `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-});
-
-hands.setOptions({
-  maxNumHands: 1,
-  modelComplexity: 1,
-  minDetectionConfidence: 0.7,
-  minTrackingConfidence: 0.7
-});
-
-hands.onResults(results => {
-  if (!results.multiHandLandmarks) return;
-
-  const lm = results.multiHandLandmarks[0];
-
-  const fingers = [
-    lm[8].y < lm[6].y,
-    lm[12].y < lm[10].y,
-    lm[16].y < lm[14].y,
-    lm[20].y < lm[18].y
-  ];
-
-  let count = fingers.filter(Boolean).length;
-  if (lm[4].x > lm[3].x) count++;
-
-  showNumber(count);
-});
-
-const cam = new Camera(video, {
-  onFrame: async () => {
-    await hands.send({ image: video });
-  },
-  width: window.innerWidth,
-  height: window.innerHeight,
-  facingMode: "user"
-});
-cam.start();
-
-/* =====================
-   RESPONSIVE
-===================== */
-window.addEventListener("resize", () => {
-  camera3D.aspect = window.innerWidth / window.innerHeight;
-  camera3D.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-});
-</script>
-
+  <script src="globe-app.js"></script>
 </body>
 </html>
