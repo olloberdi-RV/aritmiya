@@ -1,281 +1,1144 @@
-
 <!DOCTYPE html>
-<html lang="en">
+<html lang="uz">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-  <title>3D Globe - Hand Gesture Control</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kardio Quiz — Ritm va O'tkazuvchanlik Buzilishlari</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Source+Sans+3:wght@300;400;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --crimson: #C62828;
+    --crimson-dark: #8B0000;
+    --crimson-light: #EF5350;
+    --gold: #D4A017;
+    --gold-light: #F5C842;
+    --bg: #0A0A0F;
+    --surface: #111118;
+    --surface2: #18181F;
+    --border: rgba(198,40,40,0.18);
+    --text: #F0EBE3;
+    --text-muted: #9A9088;
+    --correct: #2E7D32;
+    --wrong: #C62828;
+    --font-display: 'Playfair Display', Georgia, serif;
+    --font-body: 'Source Sans 3', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
 
-  <!-- 
-    HOW TO RUN:
-    1. This application requires a local web server due to camera access restrictions
-    2. Python: python -m http.server 8000
-    3. Node.js: npx http-server -p 8000
-    4. Open browser to http://localhost:8000
-    5. Allow camera permissions when prompted
-    6. Move your hand to rotate the globe
-    7. Stop moving to detect the country at the center
-  -->
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  <!-- Three.js core -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
 
-  <!-- MediaPipe Hands for gesture detection -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  /* BG Texture */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 80% 50% at 10% 20%, rgba(139,0,0,0.12) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 40% at 90% 80%, rgba(212,160,23,0.06) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+  }
 
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+  /* Grid lines */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(198,40,40,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(198,40,40,0.04) 1px, transparent 1px);
+    background-size: 60px 60px;
+    pointer-events: none;
+    z-index: 0;
+  }
 
-    body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
-      overflow: hidden;
-      color: white;
-    }
+  .wrapper {
+    position: relative;
+    z-index: 1;
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
 
-    /* Main canvas for 3D globe */
-    #globe-canvas {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 1;
-    }
+  /* HEADER */
+  header {
+    text-align: center;
+    margin-bottom: 56px;
+    animation: fadeDown 0.8s ease both;
+  }
 
-    /* Camera preview window (small) */
-    #video-preview {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      width: 200px;
-      height: 150px;
-      border: 3px solid rgba(255, 255, 255, 0.3);
-      border-radius: 12px;
-      transform: scaleX(-1);
-      z-index: 10;
-      object-fit: cover;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-    }
+  .header-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(198,40,40,0.12);
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    padding: 6px 18px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    color: var(--crimson-light);
+    text-transform: uppercase;
+    margin-bottom: 28px;
+  }
 
-    /* Country name display */
-    #country-display {
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background: rgba(0, 0, 0, 0.85);
-      padding: 30px 50px;
-      border-radius: 20px;
-      font-size: 42px;
-      font-weight: bold;
-      color: #4CAF50;
-      z-index: 5;
-      text-align: center;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
-      border: 2px solid rgba(76, 175, 80, 0.5);
-      display: none;
-      animation: fadeIn 0.5s ease-in;
-    }
+  .pulse-dot {
+    width: 7px; height: 7px;
+    background: var(--crimson-light);
+    border-radius: 50%;
+    animation: pulse 1.8s ease infinite;
+  }
 
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
-      to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-    }
+  h1 {
+    font-family: var(--font-display);
+    font-size: clamp(28px, 5vw, 48px);
+    font-weight: 900;
+    line-height: 1.1;
+    margin-bottom: 16px;
+  }
 
-    #country-display .country-name {
-      margin-bottom: 10px;
-    }
+  h1 span { color: var(--crimson-light); }
 
-    #country-display .country-info {
-      font-size: 18px;
-      color: #aaa;
-      font-weight: normal;
-      margin-top: 10px;
-    }
+  .subtitle {
+    font-size: 15px;
+    color: var(--text-muted);
+    max-width: 500px;
+    margin: 0 auto;
+    line-height: 1.7;
+    font-weight: 300;
+  }
 
-    /* Instructions panel */
-    #instructions {
-      position: fixed;
-      top: 20px;
-      left: 20px;
-      background: rgba(0, 0, 0, 0.7);
-      padding: 20px;
-      border-radius: 12px;
-      max-width: 350px;
-      z-index: 10;
-      backdrop-filter: blur(10px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-    }
+  /* ECG line decoration */
+  .ecg-line {
+    width: 100%;
+    max-width: 400px;
+    height: 40px;
+    margin: 24px auto 0;
+    opacity: 0.35;
+  }
 
-    #instructions h2 {
-      margin-bottom: 15px;
-      color: #4CAF50;
-      font-size: 20px;
-    }
+  /* SETUP PANEL */
+  #setup-panel {
+    animation: fadeUp 0.6s 0.3s ease both;
+  }
 
-    #instructions ul {
-      list-style: none;
-      padding: 0;
-    }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    margin-bottom: 24px;
+  }
 
-    #instructions li {
-      padding: 8px 0;
-      padding-left: 25px;
-      position: relative;
-      font-size: 14px;
-      line-height: 1.4;
-    }
+  .card-title {
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
 
-    #instructions li:before {
-      content: '▸';
-      position: absolute;
-      left: 0;
-      color: #4CAF50;
-    }
+  .card-title::before {
+    content: '';
+    width: 3px;
+    height: 22px;
+    background: var(--crimson);
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
 
-    /* Status indicator */
-    #status {
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      background: rgba(0, 0, 0, 0.7);
-      padding: 15px 25px;
-      border-radius: 12px;
-      z-index: 10;
-      font-size: 16px;
-      backdrop-filter: blur(10px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-    }
+  .config-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
 
-    .status-dot {
-      display: inline-block;
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      margin-right: 10px;
-      animation: pulse 2s infinite;
-    }
+  @media (max-width: 560px) {
+    .config-grid { grid-template-columns: 1fr; }
+  }
 
-    .status-active {
-      background: #4CAF50;
-    }
+  .config-item label {
+    display: block;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    margin-bottom: 8px;
+  }
 
-    .status-inactive {
-      background: #f44336;
-    }
+  .config-item select {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 14px;
+    appearance: none;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
 
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
-    }
+  .config-item select:focus {
+    outline: none;
+    border-color: var(--crimson);
+  }
 
-    /* Coordinate display */
-    #coordinates {
-      position: fixed;
-      bottom: 20px;
-      left: 20px;
-      background: rgba(0, 0, 0, 0.7);
-      padding: 15px 20px;
-      border-radius: 10px;
-      font-size: 14px;
-      font-family: 'Courier New', monospace;
-      z-index: 10;
-      backdrop-filter: blur(10px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-    }
+  .topic-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
 
-    /* Loading indicator */
-    #loading {
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      font-size: 24px;
-      z-index: 100;
-      text-align: center;
-    }
+  @media (max-width: 560px) {
+    .topic-grid { grid-template-columns: 1fr; }
+  }
 
-    .spinner {
-      border: 4px solid rgba(255, 255, 255, 0.1);
-      border-top: 4px solid #4CAF50;
-      border-radius: 50%;
-      width: 50px;
-      height: 50px;
-      animation: spin 1s linear infinite;
-      margin: 0 auto 20px;
-    }
+  .topic-btn {
+    padding: 12px 16px;
+    background: var(--surface2);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 10px;
+    color: var(--text-muted);
+    font-size: 13px;
+    font-family: var(--font-body);
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: left;
+    line-height: 1.4;
+  }
 
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
+  .topic-btn.active {
+    background: rgba(198,40,40,0.14);
+    border-color: var(--crimson);
+    color: var(--text);
+  }
 
-    /* Responsive design */
-    @media (max-width: 768px) {
-      #instructions {
-        font-size: 12px;
-        padding: 15px;
-        max-width: 250px;
-      }
+  .topic-btn:hover { border-color: rgba(198,40,40,0.4); color: var(--text); }
 
-      #country-display {
-        font-size: 32px;
-        padding: 20px 30px;
-      }
+  .start-btn {
+    width: 100%;
+    padding: 16px;
+    background: linear-gradient(135deg, var(--crimson-dark), var(--crimson));
+    border: none;
+    border-radius: 12px;
+    color: white;
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.25s;
+    letter-spacing: 0.02em;
+    margin-top: 8px;
+  }
 
-      #video-preview {
-        width: 120px;
-        height: 90px;
-      }
-    }
-  </style>
+  .start-btn:hover {
+    background: linear-gradient(135deg, var(--crimson), var(--crimson-light));
+    transform: translateY(-2px);
+    box-shadow: 0 8px 32px rgba(198,40,40,0.35);
+  }
+
+  .start-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  /* QUIZ PANEL */
+  #quiz-panel { display: none; animation: fadeUp 0.5s ease both; }
+
+  .quiz-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 32px;
+    gap: 16px;
+  }
+
+  .progress-bar-wrap {
+    flex: 1;
+    height: 4px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--crimson-dark), var(--crimson-light));
+    border-radius: 4px;
+    transition: width 0.5s ease;
+  }
+
+  .quiz-counter {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  .score-display {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--gold);
+  }
+
+  .question-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 36px 32px 28px;
+    margin-bottom: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .question-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--crimson-dark), transparent);
+  }
+
+  .q-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  .q-topic-tag {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--crimson-light);
+    background: rgba(198,40,40,0.1);
+    border: 1px solid rgba(198,40,40,0.2);
+    border-radius: 4px;
+    padding: 3px 8px;
+  }
+
+  .q-difficulty {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border-radius: 4px;
+    padding: 3px 8px;
+  }
+
+  .diff-easy { color: #66BB6A; background: rgba(102,187,106,0.1); border: 1px solid rgba(102,187,106,0.2); }
+  .diff-medium { color: #FFA726; background: rgba(255,167,38,0.1); border: 1px solid rgba(255,167,38,0.2); }
+  .diff-hard { color: #EF5350; background: rgba(239,83,80,0.1); border: 1px solid rgba(239,83,80,0.2); }
+
+  .question-text {
+    font-family: var(--font-body);
+    font-size: 17px;
+    font-weight: 600;
+    line-height: 1.65;
+    color: var(--text);
+  }
+
+  .options-grid {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  .option-btn {
+    padding: 14px 18px;
+    background: var(--surface2);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 10px;
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 1.5;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.18s;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .option-btn .opt-label {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    margin-top: 2px;
+    transition: color 0.18s;
+  }
+
+  .option-btn:hover:not(:disabled) {
+    border-color: rgba(198,40,40,0.4);
+    background: rgba(198,40,40,0.08);
+  }
+
+  .option-btn:hover:not(:disabled) .opt-label { color: var(--crimson-light); }
+
+  .option-btn.correct {
+    border-color: #4CAF50;
+    background: rgba(76,175,80,0.12);
+  }
+
+  .option-btn.correct .opt-label { color: #81C784; }
+
+  .option-btn.wrong {
+    border-color: var(--crimson);
+    background: rgba(198,40,40,0.12);
+  }
+
+  .option-btn.wrong .opt-label { color: var(--crimson-light); }
+
+  .option-btn:disabled { cursor: default; }
+
+  /* Explanation box */
+  .explanation-box {
+    display: none;
+    background: var(--surface2);
+    border-left: 3px solid var(--gold);
+    border-radius: 0 10px 10px 0;
+    padding: 18px 20px;
+    margin-top: 16px;
+    font-size: 14px;
+    line-height: 1.75;
+    color: var(--text);
+    animation: fadeUp 0.35s ease;
+  }
+
+  .explanation-box .exp-title {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 8px;
+  }
+
+  /* AI reasoning */
+  .ai-reasoning {
+    display: none;
+    background: rgba(212,160,23,0.05);
+    border: 1px solid rgba(212,160,23,0.15);
+    border-radius: 10px;
+    padding: 18px 20px;
+    margin-top: 12px;
+    font-size: 13px;
+    line-height: 1.75;
+    color: var(--text-muted);
+    animation: fadeUp 0.4s 0.1s ease both;
+  }
+
+  .ai-reasoning .ai-title {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--gold-light);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .ai-spinner {
+    width: 10px; height: 10px;
+    border: 2px solid rgba(212,160,23,0.3);
+    border-top-color: var(--gold);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    display: none;
+  }
+
+  .next-btn {
+    padding: 12px 28px;
+    background: transparent;
+    border: 1px solid var(--crimson);
+    border-radius: 10px;
+    color: var(--crimson-light);
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: none;
+  }
+
+  .next-btn:hover {
+    background: var(--crimson);
+    color: white;
+  }
+
+  /* RESULT PANEL */
+  #result-panel { display: none; animation: fadeUp 0.6s ease both; text-align: center; }
+
+  .result-ring {
+    width: 160px;
+    height: 160px;
+    margin: 0 auto 32px;
+    position: relative;
+  }
+
+  .result-ring svg { transform: rotate(-90deg); }
+
+  .ring-track { fill: none; stroke: rgba(255,255,255,0.06); stroke-width: 10; }
+  .ring-fill { fill: none; stroke-width: 10; stroke-linecap: round; transition: stroke-dashoffset 1.2s ease; }
+
+  .ring-center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .ring-pct {
+    font-family: var(--font-display);
+    font-size: 36px;
+    font-weight: 900;
+    line-height: 1;
+  }
+
+  .ring-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+
+  .result-title {
+    font-family: var(--font-display);
+    font-size: 32px;
+    font-weight: 900;
+    margin-bottom: 10px;
+  }
+
+  .result-sub {
+    color: var(--text-muted);
+    font-size: 15px;
+    margin-bottom: 36px;
+    line-height: 1.6;
+  }
+
+  .stats-row {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    margin-bottom: 40px;
+    flex-wrap: wrap;
+  }
+
+  .stat-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 24px;
+    min-width: 110px;
+  }
+
+  .stat-num {
+    font-family: var(--font-display);
+    font-size: 28px;
+    font-weight: 900;
+    margin-bottom: 4px;
+  }
+
+  .stat-lbl {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  /* AI feedback in results */
+  .ai-feedback-box {
+    background: var(--surface);
+    border: 1px solid rgba(212,160,23,0.2);
+    border-radius: 14px;
+    padding: 24px 28px;
+    text-align: left;
+    margin-bottom: 28px;
+  }
+
+  .ai-feedback-box .af-title {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--gold-light);
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .af-content {
+    font-size: 14px;
+    line-height: 1.8;
+    color: var(--text);
+  }
+
+  .action-row {
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .btn-primary {
+    padding: 13px 32px;
+    background: linear-gradient(135deg, var(--crimson-dark), var(--crimson));
+    border: none;
+    border-radius: 10px;
+    color: white;
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(198,40,40,0.3); }
+
+  .btn-secondary {
+    padding: 13px 32px;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px;
+    color: var(--text-muted);
+    font-family: var(--font-body);
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-secondary:hover { border-color: rgba(255,255,255,0.25); color: var(--text); }
+
+  /* Typing animation */
+  .typing-cursor::after {
+    content: '|';
+    animation: blink 1s step-end infinite;
+    color: var(--gold);
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.85); }
+  }
+
+  @keyframes fadeDown {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  @keyframes blink {
+    50% { opacity: 0; }
+  }
+
+  .loading-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: 0.05em;
+  }
+
+  .loading-state .ld-icon {
+    width: 32px; height: 32px;
+    border: 2px solid rgba(198,40,40,0.2);
+    border-top-color: var(--crimson);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 16px;
+  }
+
+  /* Missed questions review */
+  .missed-list { text-align: left; margin-bottom: 28px; }
+
+  .missed-item {
+    background: var(--surface);
+    border: 1px solid rgba(239,83,80,0.15);
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin-bottom: 10px;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .missed-q { color: var(--text); margin-bottom: 6px; font-weight: 600; }
+  .missed-answer { color: #EF5350; font-size: 12px; }
+  .missed-correct { color: #66BB6A; font-size: 12px; }
+</style>
 </head>
-
 <body>
-  <!-- Loading indicator -->
-  <div id="loading">
-    <div class="spinner"></div>
-    <div>Loading Globe & Camera...</div>
+<div class="wrapper">
+
+  <!-- HEADER -->
+  <header>
+    <div class="header-badge"><span class="pulse-dot"></span>AI-Powered · Tibbiyot Quiz</div>
+    <h1>Ritm va <span>O'tkazuvchanlik</span><br>Buzilishlari</h1>
+    <p class="subtitle">Sun'iy intellekt asosida yaratilgan savollar bilan kardio aritmiyalar bo'yicha bilimingizni sinab ko'ring</p>
+    <svg class="ecg-line" viewBox="0 0 400 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <polyline points="0,20 40,20 55,20 60,5 65,35 70,5 75,20 90,20 110,20 115,12 120,20 140,20 160,20 165,5 170,35 175,5 180,20 200,20 220,20 225,12 230,20 250,20 270,20 275,5 280,35 285,5 290,20 310,20 330,20 335,12 340,20 360,20 400,20"
+        stroke="#C62828" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+    </svg>
+  </header>
+
+  <!-- SETUP PANEL -->
+  <div id="setup-panel">
+    <div class="card">
+      <div class="card-title">Mavzu tanlash</div>
+      <div class="topic-grid" id="topic-grid">
+        <button class="topic-btn active" data-topic="all">📋 Barcha mavzular</button>
+        <button class="topic-btn" data-topic="arrhythmia">❤️‍🔥 Aritmiyalar (umumiy)</button>
+        <button class="topic-btn" data-topic="supraventricular">🔺 Supraventrikulyar</button>
+        <button class="topic-btn" data-topic="ventricular">🔻 Ventrikulyar</button>
+        <button class="topic-btn" data-topic="conduction">⚡ O'tkazuvchanlik</button>
+        <button class="topic-btn" data-topic="ecg">📈 EKG diagnostika</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Sozlamalar</div>
+      <div class="config-grid">
+        <div class="config-item">
+          <label>Savollar soni</label>
+          <select id="q-count">
+            <option value="5">5 ta savol</option>
+            <option value="10" selected>10 ta savol</option>
+            <option value="15">15 ta savol</option>
+            <option value="20">20 ta savol</option>
+          </select>
+        </div>
+        <div class="config-item">
+          <label>Qiyinlik darajasi</label>
+          <select id="difficulty">
+            <option value="mixed" selected>Aralash</option>
+            <option value="easy">Oson (1-kurs)</option>
+            <option value="medium">O'rtacha (3-kurs)</option>
+            <option value="hard">Qiyin (6-kurs / rezident)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <button class="start-btn" id="start-btn" onclick="startQuiz()">
+      Testni boshlash →
+    </button>
   </div>
 
-  <!-- Instructions panel -->
-  <div id="instructions">
-    <h2>🌍 Hand Gesture Controls</h2>
-    <ul>
-      <li>Move your hand left/right to rotate longitude</li>
-      <li>Move your hand up/down to rotate latitude</li>
-      <li>Stop moving to detect the country</li>
-      <li>Open palm for best tracking</li>
-    </ul>
+  <!-- QUIZ PANEL -->
+  <div id="quiz-panel">
+    <div class="quiz-header">
+      <div class="progress-bar-wrap">
+        <div class="progress-bar" id="progress-bar" style="width:0%"></div>
+      </div>
+      <div class="quiz-counter" id="quiz-counter">1 / 10</div>
+      <div class="score-display" id="score-display">★ 0</div>
+    </div>
+
+    <div id="question-area"></div>
   </div>
 
-  <!-- Status indicator -->
-  <div id="status">
-    <span class="status-dot status-inactive" id="status-dot"></span>
-    <span id="status-text">Initializing...</span>
+  <!-- RESULT PANEL -->
+  <div id="result-panel">
+    <div class="result-ring">
+      <svg width="160" height="160" viewBox="0 0 160 160">
+        <circle class="ring-track" cx="80" cy="80" r="65"/>
+        <circle class="ring-fill" id="ring-fill" cx="80" cy="80" r="65"
+          stroke="#C62828" stroke-dasharray="408.41" stroke-dashoffset="408.41"/>
+      </svg>
+      <div class="ring-center">
+        <div class="ring-pct" id="ring-pct">0%</div>
+        <div class="ring-label">Ball</div>
+      </div>
+    </div>
+
+    <div class="result-title" id="result-title">Natija</div>
+    <div class="result-sub" id="result-sub"></div>
+
+    <div class="stats-row" id="stats-row"></div>
+
+    <div class="ai-feedback-box" id="ai-feedback-box">
+      <div class="af-title">
+        <span>🤖</span> AI Shaxsiy Tahlil
+        <div class="ai-spinner" id="fb-spinner"></div>
+      </div>
+      <div class="af-content" id="ai-feedback-content">Tahlil yuklanmoqda...</div>
+    </div>
+
+    <div class="missed-list" id="missed-list"></div>
+
+    <div class="action-row">
+      <button class="btn-primary" onclick="startQuiz()">Qayta boshlash</button>
+      <button class="btn-secondary" onclick="goSetup()">Sozlamalarni o'zgartirish</button>
+    </div>
   </div>
 
-  <!-- Coordinate display -->
-  <div id="coordinates">
-    <div>Latitude: <span id="lat-display">0.00°</span></div>
-    <div>Longitude: <span id="lon-display">0.00°</span></div>
-  </div>
+</div>
 
-  <!-- Country name display -->
-  <div id="country-display">
-    <div class="country-name" id="country-name"></div>
-    <div class="country-info" id="country-info"></div>
-  </div>
+<script>
+const TOPICS = {
+  all: 'Barcha mavzular',
+  arrhythmia: 'Aritmiyalar',
+  supraventricular: 'Supraventrikulyar',
+  ventricular: 'Ventrikulyar',
+  conduction: "O'tkazuvchanlik",
+  ecg: 'EKG diagnostika'
+};
 
-  <!-- Camera preview (small window) -->
-  <video id="video-preview" autoplay playsinline muted></video>
+let selectedTopic = 'all';
+let quizData = [];
+let currentIdx = 0;
+let score = 0;
+let userAnswers = [];
+let totalQuestions = 10;
 
-  <script src="globe-app.js"></script>
+// Topic selection
+document.querySelectorAll('.topic-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.topic-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedTopic = btn.dataset.topic;
+  });
+});
+
+async function startQuiz() {
+  const startBtn = document.getElementById('start-btn');
+  if (startBtn) startBtn.disabled = true;
+
+  totalQuestions = parseInt(document.getElementById('q-count')?.value || 10);
+  const difficulty = document.getElementById('difficulty')?.value || 'mixed';
+  const topicName = TOPICS[selectedTopic];
+
+  document.getElementById('setup-panel').style.display = 'none';
+  document.getElementById('result-panel').style.display = 'none';
+  document.getElementById('quiz-panel').style.display = 'block';
+  document.getElementById('question-area').innerHTML = `
+    <div class="loading-state">
+      <div class="ld-icon"></div>
+      <div>AI savollar tayyorlamoqda...</div>
+    </div>`;
+
+  score = 0;
+  currentIdx = 0;
+  userAnswers = [];
+
+  try {
+    const prompt = `Sen tibbiyot fakulteti talabalari uchun kardiyologiya bo'yicha test yaratuvchisan. 
+Mavzu: "${topicName}" — Ritm va o'tkazuvchanlik buzilishlari.
+Qiyinlik: ${difficulty === 'easy' ? 'Oson (1-2 kurs darajasi)' : difficulty === 'medium' ? "O'rtacha (3-4 kurs klinik fikrlash)" : difficulty === 'hard' ? "Qiyin (6-kurs/rezident, klinik ssenariylar)" : "Aralash (har xil darajalar)"}
+
+${totalQuestions} ta test savolini JSON formatida yarat. Har bir savol quyidagi tuzilishga ega bo'lishi kerak:
+
+{
+  "questions": [
+    {
+      "topic": "mavzu nomi o'zbek tilida",
+      "difficulty": "easy" | "medium" | "hard",
+      "question": "savol matni o'zbek tilida — klinik ahamiyatli, aniq, ilmiy to'g'ri",
+      "options": ["A variant", "B variant", "C variant", "D variant"],
+      "correct": 0,
+      "explanation": "To'g'ri javob tushuntirishi — patofiziyologiya, klinik ahamiyati va eslab qolish uchun kalit nuqtalar bilan (3-5 jumla)"
+    }
+  ]
+}
+
+Talablar:
+- Savollar o'zbek tilida bo'lsin, tibbiy terminlar inglizcha yoki lotincha ham bo'lishi mumkin
+- Klinik ssenariylar, EKG tafsilotlari, dori-darmon dozalari, mexanizmlar haqida so'raling
+- To'g'ri javob indeksi 0-3 orasida, tasodifiy taqsimlansin
+- Variantlar aniq va farqli bo'lsin
+- Faqat JSON qaytargil, hech qanday qo'shimcha matn yo'q`;
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 4000,
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
+
+    const data = await response.json();
+    const text = data.content.map(i => i.text || '').join('');
+    const clean = text.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(clean);
+    quizData = parsed.questions;
+    renderQuestion();
+
+  } catch (err) {
+    console.error(err);
+    document.getElementById('question-area').innerHTML = `
+      <div class="loading-state">
+        <div style="color:#EF5350">⚠ Xatolik yuz berdi. Qaytadan urinib ko'ring.</div>
+        <button class="start-btn" style="margin-top:20px;width:auto;padding:12px 28px" onclick="goSetup()">Orqaga</button>
+      </div>`;
+  }
+}
+
+function renderQuestion() {
+  if (currentIdx >= quizData.length) {
+    showResults();
+    return;
+  }
+
+  const q = quizData[currentIdx];
+  const pct = Math.round((currentIdx / quizData.length) * 100);
+  document.getElementById('progress-bar').style.width = pct + '%';
+  document.getElementById('quiz-counter').textContent = `${currentIdx + 1} / ${quizData.length}`;
+  document.getElementById('score-display').textContent = `★ ${score}`;
+
+  const labels = ['A', 'B', 'C', 'D'];
+  const diffClass = { easy: 'diff-easy', medium: 'diff-medium', hard: 'diff-hard' }[q.difficulty] || 'diff-medium';
+  const diffLabel = { easy: 'Oson', medium: "O'rtacha", hard: 'Qiyin' }[q.difficulty] || q.difficulty;
+
+  document.getElementById('question-area').innerHTML = `
+    <div class="question-card">
+      <div class="q-meta">
+        <span class="q-topic-tag">${q.topic}</span>
+        <span class="q-difficulty ${diffClass}">${diffLabel}</span>
+      </div>
+      <div class="question-text">${q.question}</div>
+    </div>
+
+    <div class="options-grid" id="options-grid">
+      ${q.options.map((opt, i) => `
+        <button class="option-btn" onclick="selectAnswer(${i})" id="opt-${i}">
+          <span class="opt-label">${labels[i]}</span>
+          <span>${opt}</span>
+        </button>
+      `).join('')}
+    </div>
+
+    <div class="explanation-box" id="explanation-box">
+      <div class="exp-title">📚 Tushuntirish</div>
+      <div>${q.explanation}</div>
+    </div>
+
+    <div class="ai-reasoning" id="ai-reasoning">
+      <div class="ai-title">
+        <span>🤖</span> AI Chuqur Tahlil
+        <div class="ai-spinner" id="ai-spinner"></div>
+      </div>
+      <div id="ai-reasoning-text" class="typing-cursor"></div>
+    </div>
+
+    <button class="next-btn" id="next-btn" onclick="nextQuestion()">
+      ${currentIdx + 1 < quizData.length ? 'Keyingi savol →' : 'Natijalarni ko\'rish →'}
+    </button>
+  `;
+}
+
+async function selectAnswer(selectedIdx) {
+  const q = quizData[currentIdx];
+  const buttons = document.querySelectorAll('.option-btn');
+
+  buttons.forEach(btn => btn.disabled = true);
+
+  const isCorrect = selectedIdx === q.correct;
+  if (isCorrect) score++;
+
+  userAnswers.push({ question: q.question, selected: selectedIdx, correct: q.correct, options: q.options, isCorrect });
+
+  buttons[q.correct].classList.add('correct');
+  if (!isCorrect) buttons[selectedIdx].classList.add('wrong');
+
+  document.getElementById('explanation-box').style.display = 'block';
+
+  // AI deep reasoning
+  const aiBox = document.getElementById('ai-reasoning');
+  const aiText = document.getElementById('ai-reasoning-text');
+  const spinner = document.getElementById('ai-spinner');
+  aiBox.style.display = 'block';
+  spinner.style.display = 'block';
+  aiText.textContent = '';
+  aiText.classList.add('typing-cursor');
+
+  try {
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1000,
+        messages: [{
+          role: "user",
+          content: `Tibbiyot talabasi uchun qisqa, aniq klinik tahlil yoz (o'zbek tilida, 3-4 jumla):
+
+Savol: ${q.question}
+To'g'ri javob: ${q.options[q.correct]}
+Talabaning javobi: ${q.options[selectedIdx]} (${isCorrect ? "TO'G'RI" : "NOTO'G'RI"})
+
+Quyidagilarni qamra ol: patofiziyologik mexanizm, klinik ahamiyat, eslab qolish uchun mnemonika yoki kalit nuqta. Ilmiy, aniq, qisqa yoz.`
+        }]
+      })
+    });
+    const d = await r.json();
+    const msg = d.content.map(i => i.text || '').join('');
+    spinner.style.display = 'none';
+    aiText.classList.remove('typing-cursor');
+    await typeText(aiText, msg);
+  } catch {
+    spinner.style.display = 'none';
+    aiText.textContent = 'Tahlil yuklanmadi.';
+    aiText.classList.remove('typing-cursor');
+  }
+
+  document.getElementById('next-btn').style.display = 'block';
+}
+
+async function typeText(el, text) {
+  el.textContent = '';
+  for (let i = 0; i < text.length; i++) {
+    el.textContent += text[i];
+    if (i % 3 === 0) await new Promise(r => setTimeout(r, 8));
+  }
+}
+
+function nextQuestion() {
+  currentIdx++;
+  renderQuestion();
+}
+
+async function showResults() {
+  document.getElementById('quiz-panel').style.display = 'none';
+  document.getElementById('result-panel').style.display = 'block';
+
+  const pct = Math.round((score / quizData.length) * 100);
+  const circumference = 408.41;
+  const offset = circumference - (pct / 100) * circumference;
+
+  setTimeout(() => {
+    document.getElementById('ring-fill').style.strokeDashoffset = offset;
+    document.getElementById('ring-pct').textContent = pct + '%';
+    if (pct >= 80) document.getElementById('ring-fill').style.stroke = '#4CAF50';
+    else if (pct >= 60) document.getElementById('ring-fill').style.stroke = '#FFA726';
+  }, 200);
+
+  const titles = {
+    excellent: "Ajoyib natija! 🏆",
+    good: "Yaxshi ish! 👍",
+    average: "O'rtacha natija 📚",
+    poor: "Ko'proq o'qish kerak 🔍"
+  };
+
+  const level = pct >= 85 ? 'excellent' : pct >= 70 ? 'good' : pct >= 50 ? 'average' : 'poor';
+  document.getElementById('result-title').textContent = titles[level];
+  document.getElementById('result-sub').textContent =
+    `${quizData.length} ta savoldan ${score} tasiga to'g'ri javob berdingiz (${pct}%)`;
+
+  document.getElementById('stats-row').innerHTML = `
+    <div class="stat-box">
+      <div class="stat-num" style="color:#4CAF50">${score}</div>
+      <div class="stat-lbl">To'g'ri</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-num" style="color:#EF5350">${quizData.length - score}</div>
+      <div class="stat-lbl">Noto'g'ri</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-num" style="color:var(--gold)">${pct}%</div>
+      <div class="stat-lbl">Foiz</div>
+    </div>
+  `;
+
+  // Missed questions
+  const missed = userAnswers.filter(a => !a.isCorrect);
+  if (missed.length > 0) {
+    document.getElementById('missed-list').innerHTML = `
+      <div class="card-title" style="margin-bottom:14px;font-family:var(--font-display);font-size:18px;font-weight:700;display:flex;align-items:center;gap:10px">
+        <span style="width:3px;height:20px;background:var(--crimson);border-radius:2px;display:inline-block"></span>
+        Xato javoblar (${missed.length} ta)
+      </div>
+      ${missed.map(a => `
+        <div class="missed-item">
+          <div class="missed-q">${a.question}</div>
+          <div class="missed-answer">❌ Sizning javobingiz: ${a.options[a.selected]}</div>
+          <div class="missed-correct">✓ To'g'ri javob: ${a.options[a.correct]}</div>
+        </div>
+      `).join('')}
+    `;
+  }
+
+  // AI feedback
+  const spinner = document.getElementById('fb-spinner');
+  const fbContent = document.getElementById('ai-feedback-content');
+  spinner.style.display = 'block';
+
+  const wrongTopics = userAnswers.filter(a => !a.isCorrect).map(a => a.question.substring(0, 60)).join('; ');
+
+  try {
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1000,
+        messages: [{
+          role: "user",
+          content: `Tibbiyot talabasi ${quizData.length} savoldan ${score} tasini to'g'ri javob berdi (${pct}%). 
+Mavzu: Ritm va o'tkazuvchanlik buzilishlari.
+Xato savollar (qisqacha): ${wrongTopics || "yo'q"}.
+
+O'zbek tilida 4-5 jumladan iborat shaxsiy tahlil va o'quv tavsiyasi yoz:
+1. Umumiy baho
+2. Qaysi bo'limlarni mustahkamlash kerak  
+3. Konkret o'qish manbalari yoki mavzular
+4. Dalda so'zi
+Ilmiy, motivatsion, qisqa.`
+        }]
+      })
+    });
+    const d = await r.json();
+    spinner.style.display = 'none';
+    fbContent.textContent = '';
+    await typeText(fbContent, d.content.map(i => i.text || '').join(''));
+  } catch {
+    spinner.style.display = 'none';
+    fbContent.textContent = "Tahlil yuklanmadi.";
+  }
+}
+
+function goSetup() {
+  document.getElementById('quiz-panel').style.display = 'none';
+  document.getElementById('result-panel').style.display = 'none';
+  document.getElementById('setup-panel').style.display = 'block';
+  document.getElementById('start-btn').disabled = false;
+}
+</script>
 </body>
 </html>
